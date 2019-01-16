@@ -6,10 +6,10 @@ function transform (babel) {
     visitor: {
       ClassDeclaration: function (path, state) {
         if (classHasRenderMethod(path)) {
-          setDisplayNameAfter(path, path.node.id, babel.types)
+          setDisplayNameAfter(path, path.node.id, babel.types, null, state)
         }
       },
-      FunctionDeclaration: function (path, state) {        
+      FunctionDeclaration: function (path, state) {
         if (doesReturnJSX(path.node.body) || (path.node.id && path.node.id.name &&
                                               isKnownComponent(path.node.id.name, state.opts.knownComponents))) {
           var displayName
@@ -18,33 +18,33 @@ function transform (babel) {
               // An anonymous function declaration in export default declaration.
               // Transform `export default function () { ... }`
               // to `var _uid1 = function () { .. }; export default __uid;`
-              // then add displayName to _uid1  
-              var extension = pathMod.extname(state.file.opts.filename) 
+              // then add displayName to _uid1
+              var extension = pathMod.extname(state.file.opts.filename)
               var name = pathMod.basename(state.file.opts.filename, extension)
-              
+
               var id = path.scope.generateUidIdentifier("uid");
               path.node.id = id
               displayName = name
             }
-            setDisplayNameAfter(path, path.node.id, babel.types, displayName)
+            setDisplayNameAfter(path, path.node.id, babel.types, displayName, state)
           }else if(path.parentPath.node.type === 'Program' || path.parentPath.node.type == 'ExportNamedDeclaration') {
-            setDisplayNameAfter(path, path.node.id, babel.types, displayName)
+            setDisplayNameAfter(path, path.node.id, babel.types, displayName, state)
           }
         }
       },
       FunctionExpression: function (path, state) {
         if(shouldSetDisplayNameForFuncExpr(path, state.opts.knownComponents)) {
-          var id = findCandidateNameForExpression(path)
+          var id = findCandidateNameForExpression(path, state)
           if (id) {
-            setDisplayNameAfter(path, id, babel.types)
+            setDisplayNameAfter(path, id, babel.types, null, state)
           }
         }
       },
       ArrowFunctionExpression: function (path, state) {
         if(shouldSetDisplayNameForFuncExpr(path, state.opts.knownComponents)) {
-          var id = findCandidateNameForExpression(path)
+          var id = findCandidateNameForExpression(path, state)
           if (id) {
-            setDisplayNameAfter(path, id, babel.types)
+            setDisplayNameAfter(path, id, babel.types, null, state)
           }
         }
       }
@@ -66,7 +66,7 @@ function shouldSetDisplayNameForFuncExpr(path, knownComponents) {
   // Parent must be either 'AssignmentExpression' or 'VariableDeclarator' or 'CallExpression' with a parent of 'VariableDeclarator'
   var id
   if (path.parentPath.node.type === 'AssignmentExpression' &&
-      path.parentPath.node.left.type !== 'MemberExpression' && // skip static members 
+      path.parentPath.node.left.type !== 'MemberExpression' && // skip static members
       path.parentPath.parentPath.node.type == 'ExpressionStatement' &&
       path.parentPath.parentPath.parentPath.node.type == 'Program') {
     id = path.parentPath.node.left
@@ -82,7 +82,7 @@ function shouldSetDisplayNameForFuncExpr(path, knownComponents) {
           path.parentPath.parentPath.parentPath.node.type === 'Program') {
         id = path.parentPath.node.id
       }
-    } 
+    }
   }
 
   if (id) {
@@ -111,7 +111,7 @@ function classHasRenderMethod(path) {
 
 // https://github.com/babel/babel/blob/master/packages/babel-plugin-transform-react-display-name/src/index.js#L62-L77
 // crawl up the ancestry looking for possible candidates for displayName inference
-function findCandidateNameForExpression(path) {
+function findCandidateNameForExpression(path, state) {
   var id
   path.find(function (path) {
     if (path.isAssignmentExpression()) {
@@ -149,9 +149,14 @@ function doesReturnJSX (body) {
   return false
 }
 
-function setDisplayNameAfter(path, nameNodeId, t, displayName) {
+function setDisplayNameAfter(path, nameNodeId, t, displayName, state) {
   if (!displayName) {
     displayName = nameNodeId.name
+  }
+
+  // Fallback to filename for component names where available
+  if (displayName === '_class' && state.file.opts.filename) {
+     displayName = componentNameFromFilename(state.file.opts.filename);
   }
 
   var blockLevelStmnt
@@ -172,6 +177,6 @@ function setDisplayNameAfter(path, nameNodeId, t, displayName) {
       t.stringLiteral(displayName)
     ))
 
-    blockLevelStmnt.insertAfter(setDisplayNameStmn)    
+    blockLevelStmnt.insertAfter(setDisplayNameStmn)
   }
 }
