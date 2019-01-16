@@ -1,5 +1,5 @@
 {
-  "name": "babel-plugin-add-react-displayname",
+  "name": "babel-plugin-add-react-displayname-filename",
   "version": "0.0.5",
   "description": "Automatically add displayName to all your components",
   "main": "index.js",
